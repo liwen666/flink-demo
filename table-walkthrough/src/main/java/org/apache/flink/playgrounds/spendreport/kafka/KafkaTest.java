@@ -16,33 +16,16 @@
  * limitations under the License.
  */
 
-package org.apache.flink.playgrounds.spendreport;
+package org.apache.flink.playgrounds.spendreport.kafka;
 
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.TableEnvironment;
-import org.apache.flink.table.api.Tumble;
 import org.apache.flink.table.expressions.TimeIntervalUnit;
 
-import static org.apache.flink.table.api.Expressions.*;
+import static org.apache.flink.table.api.Expressions.$;
 
-public class SpendReport {
-
-    public static Table report(Table transactions) {
-        return transactions.select(
-                $("account_id"),
-                $("transaction_time").floor(TimeIntervalUnit.HOUR).as("log_ts"),
-                $("amount"))
-                .groupBy($("account_id"), $("log_ts"))
-                .select(
-                        $("account_id"),
-                        $("log_ts"),
-                        $("amount").sum().as("amount"));
-
-
-//        throw new UnimplementedException();
-    }
-
+public class KafkaTest {
     public static void main(String[] args) throws Exception {
         EnvironmentSettings settings = EnvironmentSettings.newInstance().build();
         TableEnvironment tEnv = TableEnvironment.create(settings);
@@ -55,10 +38,9 @@ public class SpendReport {
                 ") WITH (\n" +
                 "    'connector' = 'kafka',\n" +
                 "    'topic'     = 'transactions',\n" +
-                "    'properties.bootstrap.servers' = 'kafka:9092',\n" +
+                "    'properties.bootstrap.servers' = '172.16.102.23:9092',\n" +
                 "    'format'    = 'csv'\n" +
                 ")");
-
         tEnv.executeSql("CREATE TABLE spend_report (\n" +
                 "    account_id BIGINT,\n" +
                 "    log_ts     TIMESTAMP(3),\n" +
@@ -66,14 +48,24 @@ public class SpendReport {
                 "    PRIMARY KEY (account_id, log_ts) NOT ENFORCED" +
                 ") WITH (\n" +
                 "  'connector'  = 'jdbc',\n" +
-                "  'url'        = 'jdbc:mysql://mysql:3306/sql-demo',\n" +
+                "  'url'        = 'jdbc:mysql://192.168.60.136:3306/sql-demo',\n" +
                 "  'table-name' = 'spend_report',\n" +
                 "  'driver'     = 'com.mysql.jdbc.Driver',\n" +
-                "  'username'   = 'sql-demo',\n" +
-                "  'password'   = 'demo-sql'\n" +
+                "  'username'   = 'root',\n" +
+                "  'password'   = 'root'\n" +
                 ")");
 
+
         Table transactions = tEnv.from("transactions");
-        report(transactions).executeInsert("spend_report");
+        Table select = transactions.select(
+                $("account_id"),
+                $("transaction_time").floor(TimeIntervalUnit.HOUR).as("log_ts"),
+                $("amount"))
+                .groupBy($("account_id"), $("log_ts"))
+                .select(
+                        $("account_id"),
+                        $("log_ts"),
+                        $("amount").sum().as("amount"));
+        select.executeInsert("spend_report");
     }
 }
